@@ -1,0 +1,338 @@
+---
+title: "NYC-Condo-Market-Value-Analysis"
+output:
+  html_document:
+    df_print: paged
+date: "2024-03-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library (dplyr)
+data <- read_csv("nyc-condos_s24.csv")
+```
+
+
+| Variable              | Description                |
+|-----------------------|----------------------------|
+| Boro-Block-Lot        | Unique identifier          |
+| CondoSection          | Condominium section        |
+| Address               | Property address           |
+| Neighborhood          | Neighborhood               |
+| BldgClassification    | Building classification    |
+| TotalUnits            | Total number of units      |
+| YearBuilt             | Year built                 |
+| GrossSqFt             | Gross square footage       |
+| EstGrossIncome        | Estimated gross income     |
+| GrossIncomePerSqFt    | Gross income per square foot|
+| EstimatedExpense      | Estimated expenses         |
+| ExpensePerSqFt        | Expense per square foot    |
+| NetOperatingIncome    | Net operating income       |
+| FullMarketValue       | Full market value          |
+| MarketValuePerSqFt    | Market value per square foot|
+| ReportYear            | Reporting year             |
+
+
+```{r}
+#mlr models that i was considering
+all.them <- lm(Full.Market.Value ~ Total.Units + Year.Built + Gross.SqFt + Net.Operating.Income + Report.Year, data = data) #this is the base/full model with the most variables
+no.NOI <- lm(Full.Market.Value ~ Total.Units + Year.Built + Gross.SqFt + Report.Year, data = data) #full model but without Net Operating Income
+no.RY <- lm(Full.Market.Value ~ Total.Units + Year.Built + Gross.SqFt + Net.Operating.Income, data = data) #fill model but without ReportYear
+no.YB <- lm(Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income + Report.Year, data = data) #full model but without year bought
+no.RY.or.NOI <- lm(Full.Market.Value ~ Total.Units + Year.Built + Gross.SqFt, data = data) #full model without ReportYear and NetOperatingIncome
+```
+
+```{r}
+summary(all.them) #shows model characteristics with Total.Units, Year.Built, Gross.SqFt, NOI, Report.Year
+```
+```{r}
+summary(no.NOI) #only shows model characteristics of model without Net.Operating.Income
+```
+
+```{r}
+summary(no.RY) #only shows model characteristics of model without Report.Year
+```
+
+```{r}
+summary(no.RY.or.NOI) #only shows model characteristics of model without Net.Operating.Income and Report.Year
+```
+
+```{r}
+summary(no.YB) #only shows model characteristics of model without Year.Built
+```
+
+
+
+
+```{r}
+anova(no.YB, all.them) #anova test of model without year built and full model
+```
+```{r}
+library(GGally)
+data %>% select(Full.Market.Value, Total.Units, Gross.SqFt, Net.Operating.Income, Report.Year, Year.Built) %>% ggpairs()
+# outputs the ggpairs for the variables listed in the select(...)
+```
+
+```{r}
+just.NOI<- lm(Full.Market.Value ~ Net.Operating.Income, data = data)
+summary(just.NOI) # just a regression with Net Operating Income
+```
+
+```{r}
+anova(just.NOI, no.YB) #anova test of model with just Net Operating Income and full model without YearBuilt
+anova(just.NOI, no.RY) #anova test of model with just Net Operating Income and full model without ReportYear
+```
+
+
+
+**Distributions of square footage per unit**
+
+```{r}
+nyc_condos_s24 <- nyc_condos_s24 %>% 
+  mutate(sqft.per.unit = Gross.SqFt / Total.Units)
+
+
+boxplot(sqft.per.unit ~ Neighborhood, data = nyc_condos_s24)
+
+ggplot(nyc_condos_s24, aes(x = Neighborhood, y = sqft.per.unit)) +
+  geom_bar(stat = "summary", fun = "mean") +
+  labs(title = "Average Sqft per Unit by Neighborhood")
+```
+
+**Most common neighberhoods in the top 100 and bottom 100, in regards to Gross.SqFt and Year.Built**
+
+```{r}
+#top_100 <- head(nyc_condos_s24[order(-nyc_condos_s24$sqft.per.unit), ], 100)
+#bottom_100 <- head(nyc_condos_s24[order(nyc_condos_s24$sqft.per.unit), ], 100)
+
+top_100 <- head(nyc_condos_s24[order(-nyc_condos_s24$Gross.SqFt), ], 100)
+bottom_100 <- head(nyc_condos_s24[order(nyc_condos_s24$Year.Built), ], 100)
+#top 3 neighborhoods from the top 100
+top_3_of_top_100_neigh <- names(sort(table(top_100$Neighborhood), decreasing = TRUE)[1:3])
+
+#top 3 neighborhoods from the bottom 100
+top_3_of_bottom_100_neigh <- names(sort(table(bottom_100$Neighborhood), decreasing = TRUE)[1:3])
+
+neighborhood_table <- data.frame(
+  Top_3_in_Top_100 = top_3_of_top_100_neigh,
+  Top_3_in_Bottom_100 = top_3_of_bottom_100_neigh
+)
+
+print(neighborhood_table)
+```
+
+
+```{r}
+nyc_condos_s24 <- nyc_condos_s24 %>%
+  mutate(
+    Is_Top_Neighborhood = Neighborhood %in% top_3_of_top_100_neigh,
+    Is_Bottom_Neighborhood = Neighborhood %in% top_3_of_bottom_100_neigh
+  )
+# Creating dummy variables for top and bottom neighborhoods using if else statement
+data_with_neighborhood$Is_Top_Neighborhood <- ifelse(data_with_neighborhood$Neighborhood %in% top_3_of_top_100_neigh, 1, 0)
+data_with_neighborhood$Is_Bottom_Neighborhood <- ifelse(data_with_neighborhood$Neighborhood %in% top_3_of_bottom_100_neigh, 1, 0)
+
+#dummy variables for neighborhoods
+model_with_neighborhood <- lm(Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income + (Is_Top_Neighborhood*Net.Operating.Income) + (Is_Bottom_Neighborhood*Total.Units), data = data_with_neighborhood)
+
+#model_with_neighborhood <- lm(Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income + Report.Year + Year.Built + (Is_Bottom_Neighborhood*Total.Units), data = data_with_neighborhood)
+
+model_without_neighborhood <- lm(Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income, data = data)
+
+anova_result <- anova(model_without_neighborhood, model_with_neighborhood)
+
+print(anova_result)
+```
+
+**Statistically Significant List:**
+(Top 3 of YearBuilt x TotalUnits) + (Bottom 3 of YearBuilt*TotalUnits) : 0.04324
+(Top 3 of sqftperunit x Gross.SqFt) : 0.04602
+(Top 3 of sqftperunit x Total.Units) : 0.02086
+(Top 3 of Gross.SqFt x Net.Operating.Income) : 0.006365
+(Bottom 3 of Year.Built x Total.Units): 0.02124
+(Bottom 3 of Year.Built x Gross.SqFt): 0.04264
+
+**The only combination that increases Multiple-R-squared value:**
+(Top 3 of Gross.SqFt x Net.Operating.Income) + (Bottom 3 of Year.Built x Total.Units) P-val:0.007571, **Multiple R-squared: 0.9997**
+
+```{r}
+summary(model_with_neighborhood)
+```
+**SplitSample Validation**
+```{r}
+# Splitting the dataset into training and test sets
+set.seed(123)  
+train_index <- sample(nrow(data_with_neighborhood), 0.6 * nrow(data_with_neighborhood))  # 60-40 split
+train <- data_with_neighborhood[train_index, ]
+test <- data_with_neighborhood[-train_index, ]
+
+null_model <- lm(Full.Market.Value ~ 1, data = train)  
+full_model <- lm(Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income, data = train)
+#full_model <- lm(Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income + Report.Year + Year.Built + (Is_Top_Neighborhood * Net.Operating.Income) + (Is_Bottom_Neighborhood * Total.Units), data = train)
+
+yhat_test <- predict(full_model, newdata = test)
+mse_test <- mean((test$Full.Market.Value - yhat_test)^2)
+
+yhat_train <- predict(full_model)
+mse_train <- mean((train$Full.Market.Value - yhat_train)^2)
+
+print(paste("Test MSE:", mse_test))
+print(paste("Training MSE:", mse_train))
+```
+
+
+**K-fold Test for overfitting**
+```{r}
+library(caret)
+
+k <- 10
+
+folds <- createFolds(nyc_condos_s24$Full.Market.Value, k = k)
+
+mse_values <- numeric(k)
+
+mse_for_fold <- function(i, data, formula){
+  fold_indices <- folds[[i]]
+  
+  train_data <- data[-fold_indices, ]
+  test_data <- data[fold_indices, ]
+  
+  model <- lm(formula, data = train_data)
+  
+  predicted <- predict(model, newdata = test_data)
+  
+  mse <- mean((test_data$Full.Market.Value - predicted)^2)
+  
+  return(mse)
+}
+
+#model_formula <- Full.Market.Value ~ Net.Operating.Income + Total.Units + Gross.SqFt
+model_formula <- Full.Market.Value ~ Net.Operating.Income + Total.Units + Gross.SqFt
+
+for (i in 1:k) {
+  mse_values[i] <- mse_for_fold(i, nyc_condos_s24, model_formula) 
+}
+mean_mse <- mean(mse_values)
+
+print(mean_mse)
+```
+
+**K-fold Test for overfitting on original model**
+```{r}
+library(caret)
+
+k <- 10
+
+folds <- createFolds(nyc_condos_s24$Full.Market.Value, k = k)
+
+mse_values <- numeric(k)
+
+mse_for_fold <- function(i, data, formula){
+  fold_indices <- folds[[i]]
+  
+  train_data <- data[-fold_indices, ]
+  test_data <- data[fold_indices, ]
+  
+  model <- lm(formula, data = train_data)
+  
+  predicted <- predict(model, newdata = test_data)
+  
+  mse <- mean((test_data$Full.Market.Value - predicted)^2)
+  
+  return(mse)
+}
+
+model_formula <- Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income + 
+  Report.Year + Year.Built 
+
+for (i in 1:k) {
+  mse_values[i] <- mse_for_fold(i, nyc_condos_s24, model_formula) 
+}
+mean_mse <- mean(mse_values)
+
+print(mean_mse)
+```
+
+**Other Validation Tests: **
+
+**Inspection of residuals**
+Since the residuals exhibit a random pattern around zero and are homoscedastic, it suggests that the model is making accurate predictions.
+```{r}
+lm_model <- lm(Full.Market.Value ~ Total.Units + Gross.SqFt + Net.Operating.Income, data = nyc_condos_s24)
+
+predicted_values <- predict(lm_model, newdata = nyc_condos_s24)
+
+residuals <- nyc_condos_s24$Full.Market.Value - predicted_values
+
+plot(predicted_values, residuals)
+summary(lm_model)
+```
+
+
+**Q-Q Plot:** A quantile-quantile (Q-Q) plot compares the quantiles of the residuals to the quantiles of a theoretical normal distribution.Since we can see a straight diagonal line this suggests that suggests that the residuals are normally distributed
+
+```{r}
+qqnorm(residuals)
+qqline(residuals)
+```
+
+
+**Prediction Intervals:** Prediction intervals provide a range within which future observations are likely to fall with a certain level of confidence. Wide prediction intervals may indicate uncertainty in the model's predictions.
+
+```{r}
+pred_intervals <- predict(lm_model, newdata = nyc_condos_s24, interval = "prediction")
+
+pred_intervals_df <- as.data.frame(cbind(fit = pred_intervals[, 1], 
+                                         lwr = pred_intervals[, 2], 
+                                         upr = pred_intervals[, 3]))
+
+interval_widths <- pred_intervals_df$upr - pred_intervals_df$lwr
+average_interval_width <- mean(interval_widths)
+print(average_interval_width)
+print(pred_intervals_df)
+```
+
+```{r}
+# the number of times the prediction interval encapsulates the "fit" value
+encapsulated <- sum(pred_intervals_df$fit >= pred_intervals_df$lwr & pred_intervals_df$fit <= pred_intervals_df$upr)
+
+# the number of encapsulated values
+print(encapsulated)
+
+```
+```{r}
+min_market_value <- min(nyc_condos_s24$Full.Market.Value)
+
+# Find the maximum value
+max_market_value <- max(nyc_condos_s24$Full.Market.Value)
+
+# Print the results
+print(paste("Minimum Full Market Value:", min_market_value))
+print(paste("Maximum Full Market Value:", max_market_value))
+```
+
+
+Considering that our model's average prediction interval width is 2,310,646, which represents only about 1.18% of the entire range of full market values in our dataset (ranging from 239,000 to 196,582,995) along with the fact that the observed full market values for all 200 samples fall within these prediction intervals suggests our model's predictions are not only accurate but also consistent with the variability present in the data.
+
+**Here is a plot**
+
+```{r}
+library(ggplot2)
+
+plot_data <- data.frame(Full_Market_Value = observed_values,
+                        Predicted_Value = pred_intervals_df$fit,
+                        Lower_Bound = pred_intervals_df$lwr,
+                        Upper_Bound = pred_intervals_df$upr)
+
+ggplot(plot_data, aes(x = Full_Market_Value, y = Predicted_Value)) +
+  geom_point() +  # actual vs. predicted values
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + 
+  labs(x = "Observed Full Market Value", y = "Predicted Full Market Value", title = "Actual vs. Predicted Full Market Values with Prediction Intervals") +
+  theme_minimal()
+```
+
+
+
+
