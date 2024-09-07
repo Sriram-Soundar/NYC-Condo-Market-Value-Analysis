@@ -1,6 +1,6 @@
 # NYC Condo Market Value Analysis
 
-Welcome to the "Analysis of NYC Condo Market Values" project repository. This project involves rigorous statistical analysis to explore the relationships between various factors such as Total Units, Gross Square Footage, and Net Operating Income on the Full Market Value of condominiums in New York City.
+Welcome to my Analysis of NYC Condo Market Values project repository. This project involves rigorous statistical analysis to explore the relationships between various factors such as Total Units, Gross Square Footage, and Net Operating Income on the Full Market Value of condominiums in New York City.
 
 ## Project Overview
 
